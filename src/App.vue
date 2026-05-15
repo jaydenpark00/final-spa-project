@@ -1,5 +1,6 @@
 <script setup>
-// 라우터의 태그들을 사용하기 위해 import를 생략해도 내부적으로 Vue가 알아서 처리해줍니다.
+import { useFavoritesStore } from './stores/favorites.js';
+const favoritesStore = useFavoritesStore();
 </script>
 
 <template>
@@ -9,6 +10,12 @@
       <nav class="links">
         <router-link to="/">홈(Home)</router-link>
         <router-link to="/movies">영화 목록(Movies)</router-link>
+        <div class="favorite-stats">
+          <span class="badge count-badge">❤️ 찜: {{ favoritesStore.totalFavorites }}개</span>
+          <span v-if="favoritesStore.averageRating > 0" class="badge rating-badge">
+            ⭐ 평균 평점: {{ favoritesStore.averageRating }}
+          </span>
+        </div>
       </nav>
     </header>
     <router-view></router-view>
@@ -17,11 +24,14 @@
 
 <style scoped>
 .app-container { font-family: sans-serif; }
-.navbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; background-color: #2c3e50; color: white; }
+.navbar { display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 40px; background-color: #2c3e50; color: white; }
 .logo { font-size: 24px; font-weight: bold; }
-.links { display: flex; gap: 20px; }
+.links { display: flex; gap: 20px; align-items: center; }
 .links a { color: #a1b1c1; text-decoration: none; font-weight: bold; font-size: 18px; }
-
-/* 현재 머무르고 있는 링크(활성화된 링크)에 자동으로 붙는 클래스입니다! */
 .links a.router-link-active { color: #42b883; text-decoration: underline; }
+.favorite-stats { display: flex; gap: 10px; margin-left: 20px; }
+.badge { padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 14px; }
+.count-badge { background-color: #ff4757; color: white; }
+.rating-badge { background-color: #f1c40f; color: #333; }
 </style>

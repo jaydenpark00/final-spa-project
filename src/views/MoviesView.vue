@@ -3,8 +3,10 @@ import { onMounted } from 'vue';
 import { useMovieStore } from '../stores/movieStore';
 
 const store = useMovieStore();
+
 onMounted(() => {
     store.fetchMovies();
+    document.title = '국내 극장 화제작 (인기순)'
 });
 </script>
 
@@ -47,11 +49,15 @@ onMounted(() => {
                         {{ movie.isFavorite ? '❤️ 찜 해제' : '🤍 찜하기' }}
                     </button>
                 </div>
-            </div>
-        </div>
-    </main>
+                <RouterLink 
+          :to="`/movies/${movie.id}`" 
+          class="stretched-link"
+          :aria-label="`${movie.title} 상세 정보 보기`"
+        ></RouterLink>
+      </div>
+    </div>
+  </main>
 </template>
-
 <style scoped>
 .page { 
     padding: 40px; 
@@ -89,15 +95,16 @@ onMounted(() => {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
     gap: 30px; 
 }
-.movie-card { 
-    border-radius: 12px; 
-    overflow: hidden; 
-    background: white; 
-    text-align: left; 
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-    transition: transform 0.2s ease; 
-    display: flex; 
-    flex-direction: column; 
+.movie-card {
+  position: relative; /* ✨ 투명 링크 영역 확장을 위한 기준점 추가 */
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+  text-align: left;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
 }
 .movie-card:hover { 
     transform: translateY(-5px); 
@@ -151,21 +158,31 @@ onMounted(() => {
     margin-bottom: 20px; 
     flex-grow: 1; 
 }
-.fav-btn { 
-    width: 100%; 
-    padding: 12px; 
-    cursor: pointer; 
-    border: none; 
-    background: #ecf0f1; 
-    color: #333; 
-    border-radius: 8px; 
-    font-weight: bold; 
-    font-size: 14px; 
-    transition: 0.3s; 
-    margin-top: auto; 
+.fav-btn {
+  position: relative; /* ✨ 레이어 층위 조절을 위한 포지션 추가 */
+  z-index: 2;         /* ✨ 투명 링크 위로 올려 버튼 단독 클릭 활성화 */
+  width: 100%;
+  padding: 12px;
+  cursor: pointer;
+  border: none;
+  background: #ecf0f1;
+  color: #333;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 14px;
+  transition: 0.3s;
+  margin-top: auto;
 }
 .fav-btn.active { 
     background: #ff4757; 
     color: white; 
+}
+.stretched-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1; /* ✨ 층위 레이어 1단계 설정 */
 }
 </style>

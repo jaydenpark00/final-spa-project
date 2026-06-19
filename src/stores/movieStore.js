@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import axios  from 'axios';
+import axios from 'axios';
 
 export const useMovieStore = defineStore('movie', () => {
     const movies = ref([]);
@@ -8,10 +8,21 @@ export const useMovieStore = defineStore('movie', () => {
     const isLoading = ref(false);
     const errorMessage = ref('');
     const selectedMovie = ref(null);
+    const currentPage = ref(1);
+    const totalPages = ref(0);
+    const sortKey = ref('default'); // 'default' | 'title' | 'release_date' | 'vote_average'
+    const selectedGenre = ref(null); // genre id (number) or null
 
-    const fetchMovies = async () => {
+    // 검색 전용 상태
+    const searchResults = ref([]);
+    const searchTotalPages = ref(0);
+    const searchCurrentPage = ref(1);
+
+    const fetchMovies = async (page = 1, genreId = null) => {
         isLoading.value = true;
         errorMessage.value = '';
+        currentPage.value = page;
+        selectedGenre.value = genreId;
 
         try {
             const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -23,7 +34,8 @@ export const useMovieStore = defineStore('movie', () => {
                 include_adult: false,
                 'release_date.gte': '2025-01-01',
                 with_release_type: '2|3',
-                page: 1
+                page,
+                ...(genreId && { with_genres: genreId }),
             };
 
             const response = await axios.get('https://api.themoviedb.org/3/discover/movie', {
@@ -31,6 +43,7 @@ export const useMovieStore = defineStore('movie', () => {
             });
 
             const fetchedMovies = response.data.results;
+            totalPages.value = response.data.total_pages;
 
             // // [세션 스토리지 상태 동기화]
             fetchedMovies.forEach(movie => {
@@ -74,18 +87,50 @@ export const useMovieStore = defineStore('movie', () => {
         }
     };
 
-    const toggleFavorite = (movieId) => {
-        const movie = movies.value.find(m => m.id === movieId);
-        if (movie) {
-            movie.isFavorite = !movie.isFavorite;
+    const fetchSearchResults = async (query, page = 1) => {
+        isLoading.value = true;
+        errorMessage.value = '';
+        searchCurrentPage.value = page;
 
-            if (movie.isFavorite) {
-                favorites.value.push(movie);
-            } else {
-                favorites.value = favorites.value.filter(m => m.id !== movieId);
-            }
-            sessionStorage.setItem('favorites', JSON.stringify(favorites.value));
+        try {
+            const response = await axios.get('https://api.themoviedb.org/3/search/movie', {
+                params: {
+                    api_key: import.meta.env.VITE_TMDB_API_KEY,
+                    query,
+                    language: 'ko-KR',
+                    page,
+                }
+            });
+            const results = response.data.results;
+            results.forEach(movie => {
+                movie.isFavorite = favorites.value.some(fav => fav.id === movie.id);
+            });
+            searchResults.value = results;
+            searchTotalPages.value = response.data.total_pages;
+        } catch (error) {
+            errorMessage.value = '검색 중 오류가 발생했습니다.';
+        } finally {
+            isLoading.value = false;
         }
+    };
+
+    const toggleFavorite = (movie) => {
+        const isFav = favorites.value.some(f => f.id === movie.id);
+        const newState = !isFav;
+
+        if (isFav) {
+            favorites.value = favorites.value.filter(m => m.id !== movie.id);
+        } else {
+            favorites.value.push(movie);
+        }
+
+        movie.isFavorite = newState;
+        const inMovies = movies.value.find(m => m.id === movie.id);
+        if (inMovies) inMovies.isFavorite = newState;
+        const inSearch = searchResults.value.find(m => m.id === movie.id);
+        if (inSearch) inSearch.isFavorite = newState;
+
+        sessionStorage.setItem('favorites', JSON.stringify(favorites.value));
     };
 
     return {
@@ -96,6 +141,14 @@ export const useMovieStore = defineStore('movie', () => {
         fetchMovies,
         toggleFavorite,
         selectedMovie,
-        fetchMovieDetail
+        fetchMovieDetail,
+        currentPage,
+        totalPages,
+        sortKey,
+        selectedGenre,
+        searchResults,
+        searchTotalPages,
+        searchCurrentPage,
+        fetchSearchResults,
     };
 });

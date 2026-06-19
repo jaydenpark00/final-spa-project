@@ -1,0 +1,196 @@
+<script setup>
+import { onMounted, computed, watch, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useMovieStore } from '../stores/movieStore';
+import { GENRE_MAP } from '../constants/genres';
+
+const route = useRoute();
+const router = useRouter();
+const store = useMovieStore();
+
+const selectedGenre = ref(null);
+const currentQuery = computed(() => route.query.q || '');
+
+const loadResults = (page = 1) => {
+    if (!currentQuery.value) return;
+    store.fetchSearchResults(currentQuery.value, page);
+    selectedGenre.value = null;
+    document.title = `"${currentQuery.value}" 검색 결과 | NETVUE`;
+};
+
+onMounted(() => loadResults());
+watch(currentQuery, () => loadResults());
+
+// 검색 결과에서 실제 등장하는 장르만 추출
+const availableGenres = computed(() => {
+    const ids = new Set();
+    store.searchResults.forEach(m => m.genre_ids.forEach(id => ids.add(id)));
+    return [...ids]
+        .filter(id => GENRE_MAP[id])
+        .map(id => ({ id, name: GENRE_MAP[id] }));
+});
+
+const displayMovies = computed(() => {
+    if (!selectedGenre.value) return store.searchResults;
+    return store.searchResults.filter(m => m.genre_ids.includes(selectedGenre.value));
+});
+
+const goToPage = (page) => {
+    if (page < 1 || page > store.searchTotalPages || page === store.searchCurrentPage) return;
+    store.fetchSearchResults(currentQuery.value, page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+const pageNumbers = computed(() => {
+    const total = store.searchTotalPages;
+    const current = store.searchCurrentPage;
+    const pages = [];
+    if (total <= 7) {
+        for (let i = 1; i <= total; i++) pages.push(i);
+        return pages;
+    }
+    pages.push(1);
+    if (current > 3) pages.push('...');
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+    return pages;
+});
+</script>
+
+<template>
+    <main class="page">
+        <div class="header-section">
+            <h1>🔍 "{{ currentQuery }}" 검색 결과</h1>
+            <p class="sub-title" v-if="!store.isLoading && store.searchResults.length">
+                총 {{ store.searchResults.length }}편 ({{ store.searchCurrentPage }} / {{ store.searchTotalPages }} 페이지)
+            </p>
+        </div>
+
+        <!-- 장르 필터 -->
+        <div class="filter-row" v-if="availableGenres.length">
+            <label class="genre-label">🎬 장르</label>
+            <select
+                class="genre-select"
+                :value="selectedGenre ?? ''"
+                @change="e => selectedGenre = e.target.value ? Number(e.target.value) : null"
+            >
+                <option value="">전체</option>
+                <option v-for="g in availableGenres" :key="g.id" :value="g.id">{{ g.name }}</option>
+            </select>
+        </div>
+
+        <div v-if="store.isLoading" class="status-message loading">⏳ 검색 중...</div>
+        <div v-else-if="store.errorMessage" class="status-message error">🚨 {{ store.errorMessage }}</div>
+        <div v-else-if="displayMovies.length === 0" class="status-message empty">검색 결과가 없습니다.</div>
+
+        <div v-else>
+            <div class="movie-list">
+                <div v-for="movie in displayMovies" :key="movie.id" class="movie-card">
+                    <img
+                        v-if="movie.poster_path"
+                        :src="`https://image.tmdb.org/t/p/w500${movie.poster_path}`"
+                        :alt="movie.title"
+                        class="poster"
+                    />
+                    <div v-else class="poster-placeholder">이미지 준비 중</div>
+
+                    <div class="card-content">
+                        <h3 class="title">{{ movie.title }}</h3>
+                        <p class="original-title" v-if="movie.original_title !== movie.title">{{ movie.original_title }}</p>
+                        <p class="release-date" v-if="movie.release_date">📅 {{ movie.release_date }}</p>
+                        <p class="rating">⭐ {{ movie.vote_average.toFixed(1) }} / 10</p>
+                        <p class="overview">
+                            {{ movie.overview ? movie.overview.substring(0, 60) + '...' : '줄거리 정보 없음' }}
+                        </p>
+                        <button
+                            @click="store.toggleFavorite(movie)"
+                            :class="{ active: movie.isFavorite }"
+                            class="fav-btn"
+                        >
+                            {{ movie.isFavorite ? '❤️ 찜 해제' : '🤍 찜하기' }}
+                        </button>
+                    </div>
+                    <RouterLink
+                        :to="`/movies/${movie.id}`"
+                        class="stretched-link"
+                        :aria-label="`${movie.title} 상세 정보 보기`"
+                    ></RouterLink>
+                </div>
+            </div>
+
+            <div class="pagination" v-if="store.searchTotalPages > 1 && !selectedGenre">
+                <button class="page-btn" @click="goToPage(store.searchCurrentPage - 1)" :disabled="store.searchCurrentPage === 1">‹</button>
+                <template v-for="p in pageNumbers" :key="p">
+                    <span v-if="p === '...'" class="page-ellipsis">...</span>
+                    <button
+                        v-else
+                        class="page-btn"
+                        :class="{ active: p === store.searchCurrentPage }"
+                        @click="goToPage(p)"
+                    >{{ p }}</button>
+                </template>
+                <button class="page-btn" @click="goToPage(store.searchCurrentPage + 1)" :disabled="store.searchCurrentPage === store.searchTotalPages">›</button>
+            </div>
+        </div>
+    </main>
+</template>
+
+<style scoped>
+.page { padding: 40px; background-color: #f8f9fa; min-height: 100vh; }
+.header-section { margin-bottom: 20px; text-align: center; color: #2c3e50; }
+.sub-title { font-size: 14px; color: #7f8c8d; margin-top: 5px; }
+
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+.genre-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: #555;
+    white-space: nowrap;
+}
+.genre-select {
+    padding: 8px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    background: white;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.genre-select:focus { border-color: #ff4757; }
+
+.status-message { text-align: center; font-size: 20px; font-weight: bold; padding: 50px; border-radius: 12px; }
+.loading { color: #3498db; background-color: #e3f2fd; }
+.error { color: #e74c3c; background-color: #fdeaea; }
+.empty { color: #7f8c8d; background-color: #ecf0f1; }
+
+.movie-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 30px; }
+.movie-card { position: relative; border-radius: 12px; overflow: hidden; background: white; text-align: left; box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: transform 0.2s; display: flex; flex-direction: column; }
+.movie-card:hover { transform: translateY(-5px); }
+.poster { width: 100%; height: 380px; object-fit: cover; }
+.poster-placeholder { width: 100%; height: 380px; background-color: #ddd; display: flex; align-items: center; justify-content: center; color: #7f8c8d; font-weight: bold; }
+.card-content { padding: 20px; display: flex; flex-direction: column; flex-grow: 1; }
+.title { font-size: 18px; color: #333; margin: 0 0 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
+.original-title { font-size: 12px; color: #999; margin: 0 0 6px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.release-date { font-size: 13px; color: #7f8c8d; margin-bottom: 10px; font-weight: 500; }
+.rating { font-weight: bold; color: #f39c12; margin-bottom: 10px; font-size: 16px; }
+.overview { font-size: 13px; color: #555; line-height: 1.4; margin-bottom: 20px; flex-grow: 1; }
+.fav-btn { position: relative; z-index: 2; width: 100%; padding: 12px; cursor: pointer; border: none; background: #ecf0f1; color: #333; border-radius: 8px; font-weight: bold; font-size: 14px; transition: 0.3s; margin-top: auto; }
+.fav-btn.active { background: #ff4757; color: white; }
+.stretched-link { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+.pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 50px; flex-wrap: wrap; }
+.page-btn { min-width: 40px; height: 40px; padding: 0 12px; border: 1px solid #ddd; background: white; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; color: #333; transition: all 0.2s; }
+.page-btn:hover:not(:disabled) { background: #ff4757; color: white; border-color: #ff4757; }
+.page-btn.active { background: #ff4757; color: white; border-color: #ff4757; }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.page-ellipsis { font-size: 15px; color: #999; padding: 0 4px; }
+</style>
